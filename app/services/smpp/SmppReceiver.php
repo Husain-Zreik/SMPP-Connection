@@ -6,10 +6,13 @@ use Illuminate\Support\Facades\Log;
 use SmppClient;
 use SmppDeliveryReceipt;
 use SocketTransport;
+use SocketTransportException;
 
 class SmppReceiver
 {
     protected $transport, $client, $transmitter;
+    protected $socket;
+
 
     public function start()
     {
@@ -19,7 +22,7 @@ class SmppReceiver
 
     protected function connect()
     {
-        $this->transport = new SocketTransport([config('smpp.smpp_service')], config('smpp.smpp_port'));
+        $this->transport = new SocketTransport([config('smpp.smpp_service')], config('smpp.smpp_port'), false, false);
         $this->transport->setRecvTimeout(30000);
         $this->transport->setSendTimeout(30000);
 
@@ -52,28 +55,23 @@ class SmppReceiver
             }
         }
     }
-    // protected function keepAlive()
-    // {
-    //     $this->client->enquireLink();
-    //     $this->client->respondEnquireLink();
-    // }
 
     protected function keepAlive()
     {
         $this->client->enquireLink();
-        $this->client->read(); // Read the EnquireLink response
+        $this->client->respondEnquireLink();
     }
-
 
 
     protected function readSms()
     {
         $time_start = microtime(true);
-        $endtime = $time_start + 120; // 2 minutes
+        $endtime = $time_start + 7; // 2 minutes
         $lastTime = 0;
 
         do {
             $res = $this->client->readSMS();
+            // dd($res);
             if ($res) {
                 try {
                     if ($res instanceof SmppDeliveryReceipt) {
@@ -92,7 +90,6 @@ class SmppReceiver
                 $lastTime = time();
             } else {
                 $this->client->respondEnquireLink();
-                $this->client->read();
             }
             // Keep connection alive every 30 seconds
             if (time() - $lastTime >= 30) {
